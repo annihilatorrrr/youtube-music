@@ -100,9 +100,18 @@ if (config.get('options.disableHardwareAcceleration')) {
   app.disableHardwareAcceleration();
 }
 
-if (is.linux() && config.plugins.isEnabled('shortcuts')) {
+if (is.linux()) {
+  const disabledFeatures = [
+    // Workaround for issue #2248
+    'UseMultiPlaneFormatForSoftwareVideo',
+  ];
+
   // Stops chromium from launching its own MPRIS service
-  app.commandLine.appendSwitch('disable-features', 'MediaSessionService');
+  if (config.plugins.isEnabled('shortcuts')) {
+    disabledFeatures.push('MediaSessionService');
+  }
+
+  app.commandLine.appendSwitch('disable-features', disabledFeatures.join());
 }
 
 if (config.get('options.proxy')) {
@@ -312,28 +321,29 @@ async function createMainWindow() {
     const { x: windowX, y: windowY } = windowPosition;
     const winSize = win.getSize();
     const display = screen.getDisplayNearestPoint(windowPosition);
-    const scaleFactor = is.windows() ? display.scaleFactor: 1;
+    const primaryDisplay = screen.getPrimaryDisplay();
 
-    const scaledWidth = Math.floor(windowSize.width / scaleFactor);
-    const scaledHeight = Math.floor(windowSize.height / scaleFactor);
+    const scaleFactor = is.windows() ? primaryDisplay.scaleFactor / display.scaleFactor : 1;
+    const scaledWidth = Math.floor(windowSize.width * scaleFactor);
+    const scaledHeight = Math.floor(windowSize.height * scaleFactor);
 
     const scaledX = windowX;
     const scaledY = windowY;
 
     if (
-      scaledX + scaledWidth < display.bounds.x - 8 ||
-      scaledX - scaledWidth > display.bounds.x + display.bounds.width ||
-      scaledY < display.bounds.y - 8 ||
-      scaledY > display.bounds.y + display.bounds.height
+      scaledX + (scaledWidth / 2) < display.bounds.x - 8 || // Left
+      scaledX + (scaledWidth / 2) > display.bounds.x + display.bounds.width || // Right
+      scaledY < display.bounds.y - 8 || // Top
+      scaledY + (scaledHeight / 2) > display.bounds.y + display.bounds.height // Bottom
     ) {
       // Window is offscreen
       if (is.dev()) {
         console.warn(
           LoggerPrefix,
           t('main.console.window.tried-to-render-offscreen', {
-            winSize: String(winSize),
-            displaySize: String(display.bounds),
-            windowPosition: String(windowPosition),
+            windowSize: String(winSize),
+            displaySize: JSON.stringify(display.bounds),
+            position: JSON.stringify(windowPosition),
           }),
         );
       }
